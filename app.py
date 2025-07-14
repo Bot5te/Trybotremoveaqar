@@ -1,5 +1,5 @@
 import telebot
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageOps
 import pytesseract
 import io
 import os
@@ -7,31 +7,24 @@ from flask import Flask, request
 import requests
 import logging
 
-# إعداد تسجيل الرسائل
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# إعداد مسار Tesseract
 pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 
-# إعداد Flask
 app = Flask(__name__)
 
-# إعداد البوت
 TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 WEBHOOK_URL = os.environ.get('WEBHOOK_URL')
 
-# إعداد Webhook
 bot.remove_webhook()
 bot.set_webhook(url=WEBHOOK_URL + '/' + TOKEN)
 
-# معالجة الأوامر /start
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(message, "مرحبًا! أرسل صورة تحتوي على نص وسأقوم باستخراج كلمة 'عقار' منها.")
 
-# معالجة الصور
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
     try:
@@ -42,19 +35,20 @@ def handle_photo(message):
         with open('temp_image.jpg', 'wb') as new_file:
             new_file.write(response.content)
         
-        # تحميل وتحسين الصورة
         image = Image.open('temp_image.jpg')
-        
-        # تحويل الصورة إلى لون رمادي
         image = image.convert('L')
-        
-        # تحسين التباين
         enhancer = ImageEnhance.Contrast(image)
         image = enhancer.enhance(3.0)
         
-        # استخراج النص
-        text = pytesseract.image_to_string(image, lang='ara+eng', config='--psm 6')
-        logger.info("النص المستخرج: %s", text)  # تسجيل النص المستخرج
+        # تحويل إلى أبيض وأسود
+        image = image.point(lambda x: 0 if x < 128 else 255, '1')
+        
+        # قص المنطقة العلوية
+        box = (image.width // 2 - 50, 0, image.width // 2 + 50, 50)
+        cropped_image = image.crop(box)
+        
+        text = pytesseract.image_to_string(cropped_image, lang='ara+eng', config='--psm 11 --oem 3')
+        logger.info("النص المستخرج: %s", text)
         
         if 'عقار' in text.lower() or 'aqar' in text.lower():
             bot.reply_to(message, "تم العثور على كلمة 'عقار' في الصورة!")
@@ -67,10 +61,9 @@ def handle_photo(message):
         os.remove('temp_image.jpg')
         
     except Exception as e:
-        logger.error("حدث خطأ: %s", str(e))  # تسجيل الأخطاء
+        logger.error("حدث خطأ: %s", str(e))
         bot.reply_to(message, f"حدث خطأ: {str(e)}")
 
-# مسار Webhook
 @app.route('/' + TOKEN, methods=['POST'])
 def webhook():
     update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
