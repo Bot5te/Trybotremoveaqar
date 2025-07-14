@@ -30,37 +30,39 @@ def send_welcome(message):
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
     try:
-        # الحصول على الصورة
         file_info = bot.get_file(message.photo[-1].file_id)
         file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_info.file_path}"
         response = requests.get(file_url)
         
-        # حفظ الصورة مؤقتًا
         with open('temp_image.jpg', 'wb') as new_file:
             new_file.write(response.content)
         
-        # تحميل الصورة باستخدام PIL
         image = Image.open('temp_image.jpg')
         
-        # استخراج النص باستخدام pytesseract
-        text = pytesseract.image_to_string(image, lang='ara')
+        # تحسين التباين
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(2.0)
         
-        # البحث عن كلمة "عقار"
-        if 'عقار' in text:
+        # قص المنطقة السفلية (اختياري)
+        box = (0, image.height - 100, image.width, image.height)
+        cropped_image = image.crop(box)
+        
+        # استخراج النص بدعم العربية والإنجليزية
+        text = pytesseract.image_to_string(cropped_image, lang='ara+eng')
+        print("النص المستخرج:", text)  # للتحقق
+        
+        if 'عقار' in text or 'aqar' in text:
             bot.reply_to(message, "تم العثور على كلمة 'عقار' في الصورة!")
         else:
-            bot.reply_to(message, "لم يتم العثور على كلمة 'عقار' في الصورة.")
+            bot.reply_to(message, "لم يتم العثور على كلمة 'عقار' في الصورة. النص المستخرج: " + text)
         
-        # إعادة إرسال الصورة
         with open('temp_image.jpg', 'rb') as photo:
             bot.send_photo(message.chat.id, photo)
         
-        # حذف الصورة المؤقتة
         os.remove('temp_image.jpg')
         
     except Exception as e:
         bot.reply_to(message, f"حدث خطأ: {str(e)}")
-
 # مسار Webhook
 @app.route('/' + TOKEN, methods=['POST'])
 def webhook():
