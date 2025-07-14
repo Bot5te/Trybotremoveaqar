@@ -5,7 +5,7 @@ import io
 import os
 from flask import Flask, request
 import requests
-
+from PIL import ImageEnhance
 # إعداد مسار Tesseract (سيتم إعداده في Docker)
 pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 
